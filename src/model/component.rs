@@ -36,7 +36,10 @@ impl ComponentKind {
         match self {
             Self::Heater => Component::Heater { setpoint_c: 21.0 },
             Self::Cooler => Component::Cooler { setpoint_c: 14.0 },
-            Self::Humidifier => Component::Humidifier { setpoint_rh: 45.0 },
+            Self::Humidifier => Component::Humidifier {
+                setpoint_rh: 45.0,
+                adiabatic: false,
+            },
             Self::Fan => Component::Fan {
                 pressure_pa: 600.0,
                 efficiency: 0.65,
@@ -53,8 +56,13 @@ pub enum Component {
     Heater { setpoint_c: f64 },
     /// Cools the air to `setpoint_c` if it is warmer, condensing water below the dew point.
     Cooler { setpoint_c: f64 },
-    /// Adds steam until `setpoint_rh` (percent) is reached.
-    Humidifier { setpoint_rh: f64 },
+    /// Adds water until `setpoint_rh` (percent) is reached. Steam keeps the temperature; with
+    /// `adiabatic` the water evaporates from the air itself, which cools it at constant enthalpy.
+    Humidifier {
+        setpoint_rh: f64,
+        #[serde(default)]
+        adiabatic: bool,
+    },
     /// Raises the pressure by `pressure_pa`; the electrical power ends up as heat in the air.
     Fan { pressure_pa: f64, efficiency: f64 },
     /// A general pressure loss (filter, damper, silencer, duct section, ...) of `pressure_pa`.
@@ -97,10 +105,20 @@ impl Component {
                 duty.power_kw = mass * (inlet.enthalpy() - out.enthalpy());
                 duty.water_kg_h = mass * (out.humidity_ratio - inlet.humidity_ratio) * 3600.0;
             }
-            Self::Humidifier { setpoint_rh } => {
-                let target =
-                    AirState::humidity_ratio_at(inlet.temp_c, setpoint_rh, inlet.abs_pressure_pa());
-                out.humidity_ratio = inlet.humidity_ratio.max(target);
+            Self::Humidifier {
+                setpoint_rh,
+                adiabatic,
+            } => {
+                if adiabatic {
+                    out = inlet.adiabatically_humidified(setpoint_rh);
+                } else {
+                    let target = AirState::humidity_ratio_at(
+                        inlet.temp_c,
+                        setpoint_rh,
+                        inlet.abs_pressure_pa(),
+                    );
+                    out.humidity_ratio = inlet.humidity_ratio.max(target);
+                }
                 duty.water_kg_h = mass * (out.humidity_ratio - inlet.humidity_ratio) * 3600.0;
             }
             Self::Fan {
@@ -165,6 +183,19 @@ mod tests {
             (out.rel_humidity() - 100.0).abs() < 1e-6,
             "should leave saturated"
         );
+    }
+
+    #[test]
+    fn adiabatic_humidifier_cools_the_air() {
+        let dry = AirState::from_rel_humidity(30.0, 10.0, 3000.0);
+        let humidifier = Component::Humidifier {
+            setpoint_rh: 60.0,
+            adiabatic: true,
+        };
+        let (out, duty) = humidifier.apply(dry);
+        assert!((out.rel_humidity() - 60.0).abs() < 1e-3, "target");
+        assert!(out.temp_c < dry.temp_c, "must cool");
+        assert!(duty.water_kg_h > 0.0, "must add water");
     }
 
     #[test]

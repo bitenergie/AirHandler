@@ -31,6 +31,9 @@ web-sys = "0.3.70"              # to access the DOM (to hide the loading text)
 
 [profile.release]
 opt-level = 2 # fast and small wasm
+lto = true
+codegen-units = 1
+strip = true
 
 # Optimize all dependencies even in debug builds:
 [profile.dev.package."*"]

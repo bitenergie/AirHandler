@@ -103,6 +103,45 @@ impl AirState {
             .unwrap_or(0.83)
     }
 
+    /// The state after evaporating water into the air at constant enthalpy until
+    /// `target_rel_humidity` (percent) is reached, or saturation if the target is higher.
+    ///
+    /// The air cools along the line of constant enthalpy. Returns `self` if the air is
+    /// already at or above the target.
+    #[must_use]
+    pub fn adiabatically_humidified(&self, target_rel_humidity: f64) -> Self {
+        let target = target_rel_humidity.clamp(0.0, 100.0);
+        if self.rel_humidity() >= target {
+            return *self;
+        }
+        let psy = psy();
+        let enthalpy = self.enthalpy() * 1000.0;
+        let at = |temp_c: f64| Self {
+            temp_c,
+            humidity_ratio: psy.hum_ratio_from_enthalpy_and_t_dry_bulb(enthalpy, temp_c),
+            ..*self
+        };
+        let wet_bulb = psy
+            .t_wet_bulb_from_hum_ratio(
+                valid_temp(self.temp_c),
+                self.humidity_ratio.max(0.0),
+                self.abs_pressure_pa(),
+            )
+            .unwrap_or(self.temp_c)
+            .min(self.temp_c);
+        // Relative humidity falls with temperature along the line, so bisect.
+        let (mut cold, mut warm) = (wet_bulb, self.temp_c);
+        for _ in 0..40 {
+            let mid = 0.5 * (cold + warm);
+            if at(mid).rel_humidity() >= target {
+                cold = mid;
+            } else {
+                warm = mid;
+            }
+        }
+        at(0.5 * (cold + warm))
+    }
+
     /// Dry-air mass flow in kg/s.
     pub fn mass_flow(&self) -> f64 {
         self.flow_m3h / 3600.0 / self.specific_volume()
@@ -160,6 +199,16 @@ mod tests {
             (warm.mass_flow() - cold.mass_flow()).abs() < 1e-12,
             "mass drifted"
         );
+    }
+
+    #[test]
+    fn adiabatic_humidifying_keeps_enthalpy_and_cools() {
+        let dry = AirState::from_rel_humidity(30.0, 10.0, 1000.0);
+        let wet = dry.adiabatically_humidified(60.0);
+        assert!((wet.rel_humidity() - 60.0).abs() < 1e-3, "target");
+        assert!((wet.enthalpy() - dry.enthalpy()).abs() < 1e-3, "enthalpy");
+        assert!(wet.temp_c < dry.temp_c, "must cool");
+        assert!(wet.humidity_ratio > dry.humidity_ratio);
     }
 
     #[test]

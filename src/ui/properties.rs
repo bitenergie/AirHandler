@@ -109,9 +109,15 @@ fn component_params(ui: &mut Ui, component: &mut Component) {
             ui.add(DragValue::new(setpoint_c).range(-40.0..=60.0).suffix(" °C"));
             ui.end_row();
         }
-        Component::Humidifier { setpoint_rh } => {
+        Component::Humidifier {
+            setpoint_rh,
+            adiabatic,
+        } => {
             ui.label("Target humidity");
             ui.add(DragValue::new(setpoint_rh).range(0.0..=100.0).suffix(" %"));
+            ui.end_row();
+            ui.label("Adiabatic cooling");
+            ui.checkbox(adiabatic, "evaporative");
             ui.end_row();
         }
         Component::Fan {
