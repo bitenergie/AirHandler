@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-`air_handler` is an egui/eframe app (Rust 2024 edition, toolchain pinned to 1.95.0 via `rust-toolchain`) that builds natively and to WASM. Goal: design and calculate different types of air handler units (AHUs). The user drags air-treatment components (heater, cooler, humidifier, fan, ...) from a library onto a duct, and a properties widget edits the selected component. Calculations are live. It was bootstrapped from emilk's `eframe_template`; only the `main.rs` entry points and build setup remain from it. UI labels are English.
+`air_handler` is an egui/eframe app (Rust 2024 edition, toolchain pinned to 1.99.0 via `rust-toolchain`) that builds natively and to WASM. Goal: design and calculate different types of air handler units (AHUs). The user drags air-treatment components (heater, cooler, humidifier, fan, ...) from a library onto a duct, and a properties widget edits the selected component. Calculations are live. It was bootstrapped from emilk's `eframe_template`; only the `main.rs` entry points and build setup remain from it. UI labels are English.
 
 ## Commands
 
