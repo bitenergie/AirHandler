@@ -132,14 +132,14 @@ impl AirState {
         // Relative humidity falls with temperature along the line, so bisect.
         let (mut cold, mut warm) = (wet_bulb, self.temp_c);
         for _ in 0..40 {
-            let mid = 0.5 * (cold + warm);
+            let mid = f64::midpoint(cold, warm);
             if at(mid).rel_humidity() >= target {
                 cold = mid;
             } else {
                 warm = mid;
             }
         }
-        at(0.5 * (cold + warm))
+        at(f64::midpoint(cold, warm))
     }
 
     /// Dry-air mass flow in kg/s.
