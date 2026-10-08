@@ -1,85 +1,100 @@
-# eframe template
+# Air Handler
 
-[![dependency status](https://deps.rs/repo/github/emilk/eframe_template/status.svg)](https://deps.rs/repo/github/emilk/eframe_template)
-[![Build Status](https://github.com/emilk/eframe_template/workflows/CI/badge.svg)](https://github.com/emilk/eframe_template/actions?workflow=CI)
+A desktop and web app for designing and calculating air handling units (AHUs). It is written in Rust with [egui](https://github.com/emilk/egui)/[eframe](https://github.com/emilk/egui/tree/master/crates/eframe) and compiles natively and to WebAssembly.
 
-This is a template repo for [eframe](https://github.com/emilk/egui/tree/master/crates/eframe), a framework for writing apps using [egui](https://github.com/emilk/egui/).
+You build a unit by dragging components from a library onto the ducts. A properties panel edits whatever is selected, and every change recalculates the air state through the whole unit.
 
-The goal is for this to be the simplest way to get started writing a GUI app in Rust.
+## Using the app
 
-You can compile your app natively or for the web, and share it using Github Pages.
+The window has three areas:
 
-## Getting started
+- **Library (left):** the available components. Drag one onto a duct.
+- **Diagram (centre):** the unit. The top row is the supply duct (outdoor air → supply air). The bottom row is the extract duct (extract air → exhaust air). Each component shows its duty, and the air state leaving it is printed below it.
+- **Properties (right):** click a component, a duct name or the heat recovery to edit its parameters and see the calculated results.
 
-Start by clicking "Use this template" at https://github.com/emilk/eframe_template/ or follow [these instructions](https://docs.github.com/en/free-pro-team@latest/github/creating-cloning-and-archiving-repositories/creating-a-repository-from-a-template).
+A highlighted line shows where a dropped component will be inserted. A duct's inlet conditions (temperature, humidity, flow) are edited by clicking its name on the left of the row.
 
-Change the name of the crate: Choose a good name for your project, and change the name to it in:
-* `Cargo.toml`
-    * Change the `package.name` from `eframe_template` to `your_crate`.
-    * Change the `package.authors`
-* `main.rs`
-    * Change `eframe_template::TemplateApp` to `your_crate::TemplateApp`
-* `index.html`
-    * Change the `<title>eframe template</title>` to `<title>your_crate</title>`. optional.
-* `assets/sw.js`
-  * Change the `'./eframe_template.js'` to `./your_crate.js` (in `filesToCache` array)
-  * Change the `'./eframe_template_bg.wasm'` to `./your_crate_bg.wasm` (in `filesToCache` array)
+### Components
 
-Alternatively, you can run `fill_template.sh` which will ask for the needed names and email and perform the above patches for you. This is particularly useful if you clone this repository outside GitHub and hence cannot make use of its
-templating function.
+| Component  | Behaviour                                                                              |
+|------------|----------------------------------------------------------------------------------------|
+| Heater     | Heats the air to a setpoint if it is colder. Reports thermal power.                    |
+| Cooler     | Cools the air to a setpoint. Below the dew point it dehumidifies and reports condensate. |
+| Humidifier | Adds steam up to a target relative humidity. Reports water use.                        |
+| Fan        | Raises the pressure. Reports electrical power, which also heats the air.               |
 
-### Learning about egui
+### Heat recovery
 
-`src/app.rs` contains a simple example app. This is just to give some inspiration - most of it can be removed if you like.
+A heat recovery spans both ducts and exchanges heat between the supply and the extract stream. Dropping one splits the rows into *outdoor air | supply air* and *extract air | exhaust air*. Components placed to its left treat the incoming air, for example a preheater. Components to its right treat the recovered air. A unit has at most one heat recovery.
 
-The official egui docs are at <https://docs.rs/egui>. If you prefer watching a video introduction, check out <https://www.youtube.com/watch?v=NtUkr_z7l84>. For inspiration, check out the [the egui web demo](https://emilk.github.io/egui/index.html) and follow the links in it to its source code.
+| Type            | Notes                                                                                   |
+|-----------------|-----------------------------------------------------------------------------------------|
+| Plate exchanger | Sensible heat only. Counterflow caps the efficiency at 0.95 and crossflow at 0.75.       |
+| Rotary wheel    | Sensible heat plus optional moisture transfer (hygroscopic wheel). Has a drive power.   |
+| Run-around coil | Sensible heat only, with a lower typical efficiency. Has a pump power.                  |
 
-### Testing locally
+All types share one steady-state model. The temperature efficiency is defined on the supply side, the transferred heat is limited by the stream with the lower heat capacity, and the extract condenses when it is cooled below its dew point. The default efficiencies are typical placeholder values, not manufacturer data.
 
-`cargo run --release`
+### Calculation assumptions
 
-On Linux you need to first run:
+- Moist air at sea-level pressure (1013.25 hPa) with a constant density of 1.2 kg/m³.
+- Saturation pressure from the Magnus formula.
+- Steady state, with no pressure-drop or fan-curve model. A fan's pressure rise is an input.
+- Latent heat released by condensation in the heat recovery is not credited to the supply air, which makes results slightly conservative.
+- There is no frost protection yet.
 
-`sudo apt-get install libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev`
+The state of the unit is saved when you close the app and restored on the next start.
 
-On Fedora Rawhide you need to run:
+## Building
 
-`dnf install clang clang-devel clang-tools-extra libxkbcommon-devel pkg-config openssl-devel libxcb-devel gtk3-devel atk fontconfig-devel`
+Requires the Rust toolchain pinned in `rust-toolchain` (installed automatically by `rustup`).
 
-### Web Locally
+### Native
 
-You can compile your app to [WASM](https://en.wikipedia.org/wiki/WebAssembly) and publish it as a web page.
+```sh
+cargo run --release
+```
 
-We use [Trunk](https://trunk-rs.github.io/trunk) to build for web target.
-1. Install the required target with `rustup target add wasm32-unknown-unknown`.
-2. Install Trunk with `cargo install --locked trunk`.
-3. Run `trunk serve` to build and serve on `http://127.0.0.1:8080`. Trunk will rebuild automatically if you edit the project.
-4. Open `http://127.0.0.1:8080/index.html#dev` in a browser. See the warning below.
+On Linux you first need:
 
-> `assets/sw.js` script will try to cache our app, and loads the cached version when it cannot connect to server allowing your app to work offline (like PWA).
-> appending `#dev` to `index.html` will skip this caching, allowing us to load the latest builds during development.
+```sh
+sudo apt-get install libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
+```
 
-### Web Deploy
-1. Just run `trunk build --release`.
-2. It will generate a `dist` directory as a "static html" website
-3. Upload the `dist` directory to any of the numerous free hosting websites including [GitHub Pages](https://docs.github.com/en/free-pro-team@latest/github/working-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
-4. we already provide a workflow that auto-deploys our app to GitHub pages if you enable it.
-> To enable Github Pages, you need to go to Repository -> Settings -> Pages -> Source -> set to `gh-pages` branch and `/` (root).
->
-> If `gh-pages` is not available in `Source`, just create and push a branch called `gh-pages` and it should be available.
->
-> If you renamed the `main` branch to something else (say you re-initialized the repository with `master` as the initial branch), be sure to edit the github workflows `.github/workflows/pages.yml` file to reflect the change
-> ```yml
-> on:
->   push:
->     branches:
->       - <branch name>
-> ```
+A `flake.nix` with a development shell is also provided.
 
-You can test the template app at <https://emilk.github.io/eframe_template/>.
+### Web
 
-## Updating egui
+The web build uses [Trunk](https://trunk-rs.github.io/trunk).
 
-As of 2023, egui is in active development with frequent releases with breaking changes. [eframe_template](https://github.com/emilk/eframe_template/) will be updated in lock-step to always use the latest version of egui.
+```sh
+rustup target add wasm32-unknown-unknown
+cargo install --locked trunk
+trunk serve
+```
 
-When updating `egui` and `eframe` it is recommended you do so one version at the time, and read about the changes in [the egui changelog](https://github.com/emilk/egui/blob/master/CHANGELOG.md) and [eframe changelog](https://github.com/emilk/egui/blob/master/crates/eframe/CHANGELOG.md).
+Then open <http://127.0.0.1:8080/index.html#dev>. The `#dev` suffix matters. Without it, the service worker in `assets/sw.js` caches the app and serves stale builds.
+
+`trunk build --release` writes a static site to `dist/`. The workflow in `.github/workflows/pages.yml` deploys it to GitHub Pages on every push to `main`. To enable it, set the repository's Pages source to the `gh-pages` branch.
+
+## Development
+
+```sh
+./check.sh                                    # everything CI runs: check, wasm check, fmt, clippy, tests, trunk build
+cargo test                                    # unit tests (they cover the model)
+cargo clippy --all-targets -- -D warnings     # the lint set in Cargo.toml is strict; warnings fail CI
+```
+
+The code has two layers:
+
+- `src/model/` is the domain and calculation code (psychrometrics, components, heat recovery, the unit). It does not depend on egui and is unit tested.
+- `src/ui/` holds the widgets (library, diagram, properties). They read and edit the model.
+- `src/app.rs` owns the unit and arranges the panels.
+
+## License
+
+Licensed under [MIT license](LICENSE-MIT).
+
+---
+
+The project started from [eframe_template](https://github.com/emilk/eframe_template).
