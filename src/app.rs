@@ -6,6 +6,7 @@ use crate::ui::{self, Selection};
 #[serde(default)] // new fields fall back to defaults when loading older persisted state
 pub struct AirHandlerApp {
     unit: AirHandlerUnit,
+    chart: ui::ChartSettings,
     #[serde(skip)]
     selection: Option<Selection>,
 }
@@ -36,6 +37,14 @@ impl eframe::App for AirHandlerApp {
             .default_size(280.0)
             .show(ui, |ui| {
                 ui::properties(ui, &mut self.unit, &mut self.selection);
+            });
+
+        egui::Panel::bottom("chart")
+            .resizable(true)
+            .default_size(380.0)
+            .size_range(160.0..=900.0)
+            .show(ui, |ui| {
+                ui::chart(ui, &self.unit, &mut self.chart);
             });
 
         egui::CentralPanel::default().show(ui, |ui| {

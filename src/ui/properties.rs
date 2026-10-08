@@ -77,6 +77,12 @@ fn component_properties(ui: &mut Ui, unit: &mut AirHandlerUnit, id: ComponentId)
                 ui.label("Outlet humidity");
                 ui.label(format!("{:.0} %", stage.out.rel_humidity()));
                 ui.end_row();
+                ui.label("Dew point");
+                ui.label(format!("{:.1} °C", stage.out.dew_point_c()));
+                ui.end_row();
+                ui.label("Static pressure");
+                ui.label(format!("{:+.0} Pa", stage.out.pressure_pa));
+                ui.end_row();
                 ui.label("Power");
                 ui.label(format!("{:.2} kW", stage.duty.power_kw));
                 ui.end_row();
@@ -122,6 +128,16 @@ fn component_params(ui: &mut Ui, component: &mut Component) {
             ui.end_row();
             ui.label("Efficiency");
             ui.add(DragValue::new(efficiency).range(0.05..=1.0).speed(0.01));
+            ui.end_row();
+        }
+        Component::PressureDrop { pressure_pa } => {
+            ui.label("Pressure drop");
+            ui.add(
+                DragValue::new(pressure_pa)
+                    .range(0.0..=2000.0)
+                    .speed(2.0)
+                    .suffix(" Pa"),
+            );
             ui.end_row();
         }
     }

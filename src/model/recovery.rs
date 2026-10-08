@@ -171,14 +171,14 @@ impl HeatRecovery {
 
         supply_out.humidity_ratio = supply_out
             .humidity_ratio
-            .min(AirState::humidity_ratio_at(supply_out.temp_c, 100.0));
-        let extract_saturated = AirState::humidity_ratio_at(extract_out.temp_c, 100.0);
+            .min(supply_out.saturation_humidity_ratio());
+        let extract_saturated = extract_out.saturation_humidity_ratio();
         let condensed = (extract_out.humidity_ratio - extract_saturated).max(0.0);
         extract_out.humidity_ratio -= condensed;
 
         Exchange {
-            supply_out,
-            extract_out,
+            supply_out: supply_out.with_mass_flow(supply.mass_flow()),
+            extract_out: extract_out.with_mass_flow(extract.mass_flow()),
             duty: RecoveryDuty {
                 heat_kw,
                 electrical_kw,

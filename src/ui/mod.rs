@@ -1,9 +1,11 @@
 //! egui widgets. They read and edit the [`crate::model`] and never own it.
 
+mod chart;
 mod diagram;
 mod library;
 mod properties;
 
+pub use chart::{ChartSettings, chart};
 pub use diagram::diagram;
 pub use library::library;
 pub use properties::properties;
@@ -26,6 +28,7 @@ fn kind_color(kind: ComponentKind) -> Color32 {
         ComponentKind::Cooler => Color32::from_rgb(0x4b, 0x8f, 0xd9),
         ComponentKind::Humidifier => Color32::from_rgb(0x3f, 0xb5, 0xa5),
         ComponentKind::Fan => Color32::from_rgb(0x9a, 0x9a, 0xa5),
+        ComponentKind::PressureDrop => Color32::from_rgb(0xc9, 0xa2, 0x3c),
     }
 }
 

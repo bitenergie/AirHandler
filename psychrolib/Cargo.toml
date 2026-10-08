@@ -1,0 +1,25 @@
+[package]
+name = "psychrolib"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.74"
+description = "Thermodynamic properties of moist air and the standard atmosphere (Rust port of PsychroLib, based on ASHRAE Handbook - Fundamentals 2017)."
+license = "MIT"
+keywords = ["psychrometrics", "hvac", "thermodynamics", "humidity", "ashrae"]
+categories = ["science", "mathematics"]
+
+[dependencies]
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Physical formulas use many short, similar names (t_dry_bulb, t_wet_bulb, ...)
+similar_names = "allow"
+# Coefficients are copied verbatim from the ASHRAE Handbook
+unreadable_literal = "allow"
+excessive_precision = "allow"
+

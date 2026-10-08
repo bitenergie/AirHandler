@@ -1,6 +1,7 @@
 //! Domain model and calculations. Knows nothing about egui.
 
 mod air;
+pub mod chart;
 mod component;
 mod recovery;
 mod unit;

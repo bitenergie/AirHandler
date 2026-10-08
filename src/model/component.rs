@@ -9,10 +9,17 @@ pub enum ComponentKind {
     Cooler,
     Humidifier,
     Fan,
+    PressureDrop,
 }
 
 impl ComponentKind {
-    pub const ALL: [Self; 4] = [Self::Heater, Self::Cooler, Self::Humidifier, Self::Fan];
+    pub const ALL: [Self; 5] = [
+        Self::Heater,
+        Self::Cooler,
+        Self::Humidifier,
+        Self::Fan,
+        Self::PressureDrop,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -20,6 +27,7 @@ impl ComponentKind {
             Self::Cooler => "Cooler",
             Self::Humidifier => "Humidifier",
             Self::Fan => "Fan",
+            Self::PressureDrop => "Pressure drop",
         }
     }
 
@@ -33,6 +41,7 @@ impl ComponentKind {
                 pressure_pa: 600.0,
                 efficiency: 0.65,
             },
+            Self::PressureDrop => Component::PressureDrop { pressure_pa: 100.0 },
         }
     }
 }
@@ -48,6 +57,8 @@ pub enum Component {
     Humidifier { setpoint_rh: f64 },
     /// Raises the pressure by `pressure_pa`; the electrical power ends up as heat in the air.
     Fan { pressure_pa: f64, efficiency: f64 },
+    /// A general pressure loss (filter, damper, silencer, duct section, ...) of `pressure_pa`.
+    PressureDrop { pressure_pa: f64 },
 }
 
 /// What a component consumes or produces while treating the air.
@@ -66,6 +77,7 @@ impl Component {
             Self::Cooler { .. } => ComponentKind::Cooler,
             Self::Humidifier { .. } => ComponentKind::Humidifier,
             Self::Fan { .. } => ComponentKind::Fan,
+            Self::PressureDrop { .. } => ComponentKind::PressureDrop,
         }
     }
 
@@ -81,13 +93,13 @@ impl Component {
             }
             Self::Cooler { setpoint_c } => {
                 out.temp_c = inlet.temp_c.min(setpoint_c);
-                let saturated = AirState::humidity_ratio_at(out.temp_c, 100.0);
-                out.humidity_ratio = inlet.humidity_ratio.min(saturated);
+                out.humidity_ratio = inlet.humidity_ratio.min(out.saturation_humidity_ratio());
                 duty.power_kw = mass * (inlet.enthalpy() - out.enthalpy());
                 duty.water_kg_h = mass * (out.humidity_ratio - inlet.humidity_ratio) * 3600.0;
             }
             Self::Humidifier { setpoint_rh } => {
-                let target = AirState::humidity_ratio_at(inlet.temp_c, setpoint_rh);
+                let target =
+                    AirState::humidity_ratio_at(inlet.temp_c, setpoint_rh, inlet.abs_pressure_pa());
                 out.humidity_ratio = inlet.humidity_ratio.max(target);
                 duty.water_kg_h = mass * (out.humidity_ratio - inlet.humidity_ratio) * 3600.0;
             }
@@ -98,10 +110,13 @@ impl Component {
                 let electrical_kw =
                     inlet.flow_m3h / 3600.0 * pressure_pa / efficiency.max(0.01) / 1000.0;
                 out.temp_c += electrical_kw / inlet.heat_capacity_rate().max(f64::EPSILON);
+                out.pressure_pa += pressure_pa;
                 duty.power_kw = electrical_kw;
             }
+            Self::PressureDrop { pressure_pa } => out.pressure_pa -= pressure_pa,
         }
-        (out, duty)
+        // Mass flow is conserved; the volume flow follows the new density.
+        (out.with_mass_flow(mass), duty)
     }
 
     /// One-line summary of `duty` for display on the component.
@@ -111,6 +126,7 @@ impl Component {
                 format!("{:.1} kW", duty.power_kw)
             }
             Self::Humidifier { .. } => format!("{:.1} kg/h", duty.water_kg_h),
+            Self::PressureDrop { pressure_pa } => format!("−{pressure_pa:.0} Pa"),
         }
     }
 }
@@ -135,7 +151,8 @@ mod tests {
     fn heater_does_not_cool() {
         let warm = AirState::from_rel_humidity(30.0, 40.0, 1000.0);
         let (out, duty) = ComponentKind::Heater.instantiate().apply(warm);
-        assert_eq!(out, warm);
+        assert_eq!(out.temp_c, warm.temp_c);
+        assert_eq!(out.humidity_ratio, warm.humidity_ratio);
         assert_eq!(duty, Duty::default());
     }
 
@@ -159,5 +176,26 @@ mod tests {
             "target not reached"
         );
         assert!(duty.water_kg_h > 0.0, "humidifier must add water");
+    }
+
+    #[test]
+    fn pressure_drop_lowers_pressure_only() {
+        let air = AirState::from_rel_humidity(20.0, 50.0, 3000.0);
+        let (out, duty) = Component::PressureDrop { pressure_pa: 150.0 }.apply(air);
+        assert!((out.pressure_pa + 150.0).abs() < 1e-9, "not lowered");
+        assert_eq!(out.temp_c, air.temp_c);
+        assert_eq!(out.humidity_ratio, air.humidity_ratio);
+        assert_eq!(duty, Duty::default());
+        assert!(
+            (out.mass_flow() - air.mass_flow()).abs() < 1e-9,
+            "mass drifted"
+        );
+    }
+
+    #[test]
+    fn fan_raises_pressure() {
+        let air = AirState::from_rel_humidity(20.0, 50.0, 3000.0);
+        let (out, _) = ComponentKind::Fan.instantiate().apply(air);
+        assert!((out.pressure_pa - 600.0).abs() < 1e-9, "not raised");
     }
 }
