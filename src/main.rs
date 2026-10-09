@@ -13,7 +13,7 @@ fn main() -> eframe::Result {
             .with_icon(
                 // NOTE: Adding an icon is optional
                 eframe::icon_data::from_png_bytes(
-                    &include_bytes!("../assets/favicon-512x512.png")[..],
+                    &include_bytes!("../assets/favicon-304x304.png")[..],
                 )
                 .expect("Failed to load icon"),
             ),

@@ -1,0 +1,69 @@
+{
+  "supply": {
+    "inlet_temp_c": -6.0,
+    "inlet_rel_humidity": 40.0,
+    "flow_m3h": 2600.0,
+    "components": [
+      {
+        "id": 21,
+        "component": {
+          "PressureDrop": {
+            "pressure_pa": 50.0
+          }
+        }
+      },
+      {
+        "id": 22,
+        "component": {
+          "Fan": {
+            "pressure_pa": 813.0,
+            "efficiency": 0.65
+          }
+        }
+      },
+      {
+        "id": 17,
+        "component": {
+          "Heater": {
+            "setpoint_c": 1.5
+          }
+        }
+      }
+    ]
+  },
+  "extract": {
+    "inlet_temp_c": 21.0,
+    "inlet_rel_humidity": 37.0,
+    "flow_m3h": 2600.0,
+    "components": [
+      {
+        "id": 23,
+        "component": {
+          "Fan": {
+            "pressure_pa": 600.0,
+            "efficiency": 0.65
+          }
+        }
+      },
+      {
+        "id": 24,
+        "component": {
+          "PressureDrop": {
+            "pressure_pa": 50.0
+          }
+        }
+      }
+    ]
+  },
+  "recovery": {
+    "recovery": {
+      "PlateExchanger": {
+        "arrangement": "Counterflow",
+        "temp_efficiency": 0.85
+      }
+    },
+    "supply_pos": 3,
+    "extract_pos": 1
+  },
+  "next_id": 25
+}

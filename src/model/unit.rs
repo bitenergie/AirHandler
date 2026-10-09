@@ -92,7 +92,7 @@ impl PlacedRecovery {
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
-#[serde(default)] // new fields fall back to defaults when loading older persisted state
+#[serde(default = "AirHandlerUnit::empty")] // missing fields in older persisted state fall back to an empty unit
 pub struct AirHandlerUnit {
     supply: Duct,
     extract: Duct,
@@ -100,14 +100,22 @@ pub struct AirHandlerUnit {
     next_id: u64,
 }
 
-impl Default for AirHandlerUnit {
-    fn default() -> Self {
+impl AirHandlerUnit {
+    /// An empty unit with default inlet conditions.
+    fn empty() -> Self {
         Self {
             supply: Duct::new(-5.0, 80.0, 3000.0),
             extract: Duct::new(22.0, 40.0, 3000.0),
             recovery: None,
             next_id: 0,
         }
+    }
+}
+
+impl Default for AirHandlerUnit {
+    /// The starting design from `default_unit.json`.
+    fn default() -> Self {
+        serde_json::from_str(include_str!("default_unit.json")).unwrap_or_else(|_| Self::empty())
     }
 }
 
@@ -343,8 +351,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn default_unit_is_the_bundled_design() {
+        let unit = AirHandlerUnit::default();
+        assert_eq!(unit.duct(DuctId::Supply).components.len(), 3);
+        assert_eq!(unit.duct(DuctId::Extract).components.len(), 2);
+        assert!(unit.recovery.is_some());
+    }
+
+    #[test]
     fn add_inserts_in_order_and_clamps_index() {
-        let mut unit = AirHandlerUnit::default();
+        let mut unit = AirHandlerUnit::empty();
         let a = unit.add(DuctId::Supply, 0, false, ComponentKind::Heater);
         let b = unit.add(DuctId::Supply, 0, false, ComponentKind::Cooler);
         let c = unit.add(DuctId::Supply, 99, false, ComponentKind::Fan);
@@ -359,7 +375,7 @@ mod tests {
 
     #[test]
     fn remove_and_lookup() {
-        let mut unit = AirHandlerUnit::default();
+        let mut unit = AirHandlerUnit::empty();
         let id = unit.add(DuctId::Extract, 0, false, ComponentKind::Humidifier);
         assert!(unit.component_mut(id).is_some(), "component should exist");
         unit.remove(id);
@@ -369,7 +385,7 @@ mod tests {
 
     #[test]
     fn stages_chain_outlet_to_inlet() {
-        let mut unit = AirHandlerUnit::default();
+        let mut unit = AirHandlerUnit::empty();
         unit.add(DuctId::Supply, 0, false, ComponentKind::Heater);
         unit.add(DuctId::Supply, 1, false, ComponentKind::Humidifier);
         let sim = unit.simulate();
@@ -386,7 +402,7 @@ mod tests {
 
     #[test]
     fn recovery_position_follows_inserts_and_removals() {
-        let mut unit = AirHandlerUnit::default();
+        let mut unit = AirHandlerUnit::empty();
         let first = unit.add(DuctId::Supply, 0, false, ComponentKind::Heater);
         unit.place_recovery(HeatRecoveryKind::PlateExchanger, DuctId::Supply, 1);
         assert_eq!(unit.recovery_position(DuctId::Supply), Some(1));
@@ -407,7 +423,7 @@ mod tests {
 
     #[test]
     fn components_before_recovery_precondition_the_exchange() {
-        let mut unit = AirHandlerUnit::default();
+        let mut unit = AirHandlerUnit::empty();
         unit.place_recovery(HeatRecoveryKind::PlateExchanger, DuctId::Supply, 0);
         let cold = unit.simulate();
 
