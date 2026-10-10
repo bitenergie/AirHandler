@@ -158,6 +158,10 @@ fn state_text(state: &AirState) -> String {
     format!("{:.1} °C · {:.0} %", state.temp_c, state.rel_humidity())
 }
 
+fn flow_text(state: &AirState) -> String {
+    format!("{:.0} m³/h", state.flow_m3h)
+}
+
 fn duct_row(
     ui: &mut Ui,
     width: f32,
@@ -291,6 +295,13 @@ fn row_labels(
         FontId::proportional(12.0),
         visuals.weak_text_color(),
     );
+    painter.text(
+        rect.min + vec2(12.0, 52.0),
+        Align2::LEFT_TOP,
+        flow_text(&inlet),
+        FontId::proportional(12.0),
+        visuals.weak_text_color(),
+    );
 
     painter.line_segment(
         [
@@ -309,7 +320,13 @@ fn row_labels(
     painter.text(
         Pos2::new(outlet_x, line_y - BOX_SIZE.y / 2.0 - 6.0),
         align,
-        format!("{}: {}", id.outlet_label(), state_text(&result.outlet)),
+        format!(
+            "{}: {}
+{}",
+            id.outlet_label(),
+            state_text(&result.outlet),
+            flow_text(&result.outlet),
+        ),
         FontId::proportional(12.0),
         visuals.weak_text_color(),
     );
