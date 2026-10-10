@@ -62,7 +62,10 @@ const EXTRACT_COLOR: Color32 = Color32::from_rgb(0xd9, 0x8a, 0x3c);
 /// Psychrometric chart or Mollier h-x diagram with the state points of both airstreams.
 ///
 /// Drag pans, Ctrl + scroll zooms, right-drag draws a zoom box, double-click resets the view.
-pub fn chart(ui: &mut Ui, unit: &mut AirHandlerUnit, settings: &mut ChartSettings) {
+///
+/// Returns the screen rectangle of the plot when the user asked to save it as an image.
+pub fn chart(ui: &mut Ui, unit: &mut AirHandlerUnit, settings: &mut ChartSettings) -> Option<Rect> {
+    let mut save_requested = false;
     ui.horizontal(|ui| {
         for option in ChartKind::ALL {
             ui.selectable_value(&mut settings.kind, option, option.label());
@@ -75,6 +78,7 @@ pub fn chart(ui: &mut Ui, unit: &mut AirHandlerUnit, settings: &mut ChartSetting
                 .speed(1.0)
                 .suffix(" mbar"),
         );
+        save_requested = ui.button("Save PNG").clicked();
         ui.weak("drag: pan · Ctrl+scroll: zoom · right-drag: box zoom · double-click: reset");
     });
     let kind = settings.kind;
@@ -94,8 +98,9 @@ pub fn chart(ui: &mut Ui, unit: &mut AirHandlerUnit, settings: &mut ChartSetting
     let (min_aspect, max_aspect) = PLOT_ASPECT_RANGE;
     let width = available.x.min(available.y * max_aspect);
     let height = available.y.min(available.x / min_aspect);
+    let mut plot_rect = None;
     ui.vertical_centered(|ui| {
-        Plot::new("air_chart")
+        let response = Plot::new("air_chart")
             .width(width)
             .height(height)
             .data_aspect(1.0)
@@ -147,7 +152,9 @@ pub fn chart(ui: &mut Ui, unit: &mut AirHandlerUnit, settings: &mut ChartSetting
                     );
                 }
             });
+        plot_rect = Some(response.response.rect);
     });
+    plot_rect.filter(|_| save_requested)
 }
 
 /// Hover text of one state point of a duct.

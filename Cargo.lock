@@ -171,6 +171,7 @@ dependencies = [
  "egui_plot",
  "env_logger",
  "log",
+ "png",
  "pollster 0.4.0",
  "psychrolib",
  "rfd",
