@@ -97,6 +97,7 @@ fn encode_png(image: &egui::ColorImage) -> Result<Vec<u8>, png::EncodingError> {
 impl AirHandlerApp {
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        egui_extras::install_image_loaders(&cc.egui_ctx);
         cc.storage
             .and_then(|storage| eframe::get_value(storage, eframe::APP_KEY))
             .unwrap_or_default()
@@ -272,9 +273,24 @@ impl AirHandlerApp {
                     }
                 });
                 ui.add_space(16.0);
-                ui.toggle_value(&mut self.panels.library, "Library");
-                ui.toggle_value(&mut self.panels.properties, "Properties");
-                ui.toggle_value(&mut self.panels.chart, "Chart");
+                panel_toggle(
+                    ui,
+                    &mut self.panels.library,
+                    egui::include_image!("../assets/box-align-left.png"),
+                    "Library",
+                );
+                panel_toggle(
+                    ui,
+                    &mut self.panels.properties,
+                    egui::include_image!("../assets/box-align-right.png"),
+                    "Properties",
+                );
+                panel_toggle(
+                    ui,
+                    &mut self.panels.chart,
+                    egui::include_image!("../assets/box-align-bottom.png"),
+                    "Chart",
+                );
                 ui.add_space(16.0);
                 egui::widgets::global_theme_preference_buttons(ui);
                 if let Some(error) = &self.files.error {
@@ -282,6 +298,16 @@ impl AirHandlerApp {
                 }
             });
         });
+    }
+}
+
+/// Icon toggle button for showing or hiding a panel.
+fn panel_toggle(ui: &mut egui::Ui, shown: &mut bool, icon: egui::ImageSource<'_>, tooltip: &str) {
+    let button =
+        egui::Button::image(egui::Image::new(icon).fit_to_exact_size(egui::vec2(18.0, 18.0)))
+            .selected(*shown);
+    if ui.add(button).on_hover_text(tooltip).clicked() {
+        *shown = !*shown;
     }
 }
 
