@@ -166,18 +166,6 @@ impl AirState {
         self.flow_m3h / 3600.0 / self.specific_volume()
     }
 
-    /// The same state with the volume flow adjusted so that the dry-air mass flow is `mass_kg_s`.
-    ///
-    /// Heating, humidifying or changing the pressure changes the density, so the volume flow
-    /// has to follow while the mass flow stays constant along the duct.
-    #[must_use]
-    pub fn with_mass_flow(self, mass_kg_s: f64) -> Self {
-        Self {
-            flow_m3h: mass_kg_s * 3600.0 * self.specific_volume(),
-            ..self
-        }
-    }
-
     /// Heat capacity rate of the stream in kW/K.
     pub fn heat_capacity_rate(&self) -> f64 {
         self.mass_flow() * (1.006 + 1.86 * self.humidity_ratio)
@@ -203,21 +191,6 @@ mod tests {
         let state = AirState::from_rel_humidity(25.0, 80.0, 1000.0);
         assert!((state.humidity_ratio - 0.015962).abs() < 1e-5, "ratio");
         assert!((state.dew_point_c() - 21.3094).abs() < 1e-3, "dew point");
-    }
-
-    #[test]
-    fn mass_flow_is_kept_by_density_change() {
-        let cold = AirState::from_rel_humidity(-5.0, 80.0, 3000.0);
-        let warm = AirState {
-            temp_c: 21.0,
-            ..cold
-        }
-        .with_mass_flow(cold.mass_flow());
-        assert!(warm.flow_m3h > cold.flow_m3h, "warm air takes more volume");
-        assert!(
-            (warm.mass_flow() - cold.mass_flow()).abs() < 1e-12,
-            "mass drifted"
-        );
     }
 
     #[test]

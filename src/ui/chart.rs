@@ -1,6 +1,6 @@
 use crate::model::chart::{self, CHART_TEMP_RANGE_C, LATENT_HEAT_KJ_KG};
 use crate::model::{AirHandlerUnit, AirState, DuctId, Simulation};
-use egui::{Align, Align2, Color32, DragValue, Rect, RichText, Ui, vec2};
+use egui::{Align, Align2, Color32, DragValue, Rect, RichText, Ui, UiBuilder, vec2};
 use egui_plot::{
     HoverPosition, Line, LineStyle, Plot, PlotPoint, PlotPoints, PlotUi, Points, Text,
 };
@@ -99,7 +99,12 @@ pub fn chart(ui: &mut Ui, unit: &mut AirHandlerUnit, settings: &mut ChartSetting
     let width = available.x.min(available.y * max_aspect);
     let height = available.y.min(available.x / min_aspect);
     let mut plot_rect = None;
-    ui.vertical_centered(|ui| {
+    let top_left = ui.available_rect_before_wrap().min;
+    let plot_area = Rect::from_min_size(
+        top_left + vec2((available.x - width) / 2.0, (available.y - height) / 2.0),
+        vec2(width, height),
+    );
+    ui.scope_builder(UiBuilder::new().max_rect(plot_area), |ui| {
         let response = Plot::new("air_chart")
             .width(width)
             .height(height)

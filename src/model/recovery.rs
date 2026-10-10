@@ -1,8 +1,7 @@
 //! Heat recovery between the supply and the extract airstream.
 //!
 //! All types share one steady-state model: the temperature efficiency is defined on the
-//! supply side (as in EN 308), the exchanged heat is limited by the weaker stream, and the
-//! extract stream condenses if it is cooled below its dew point. Types differ in which
+//! supply side (as in EN 308) and does not depend on the flows, and the extract stream condenses if it is cooled below its dew point. Types differ in which
 //! parameters they have and whether they transfer moisture.
 
 use super::air::AirState;
@@ -148,13 +147,7 @@ impl HeatRecovery {
         let extract_rate = extract.heat_capacity_rate().max(f64::EPSILON);
 
         let delta_t = extract.temp_c - supply.temp_c;
-        let wanted = eps * supply_rate * delta_t;
-        let limit = supply_rate.min(extract_rate) * delta_t;
-        let heat_kw = if delta_t >= 0.0 {
-            wanted.min(limit)
-        } else {
-            wanted.max(limit)
-        };
+        let heat_kw = eps * supply_rate * delta_t;
 
         let mut supply_out = supply;
         let mut extract_out = extract;
@@ -177,8 +170,8 @@ impl HeatRecovery {
         extract_out.humidity_ratio -= condensed;
 
         Exchange {
-            supply_out: supply_out.with_mass_flow(supply.mass_flow()),
-            extract_out: extract_out.with_mass_flow(extract.mass_flow()),
+            supply_out,
+            extract_out,
             duty: RecoveryDuty {
                 heat_kw,
                 electrical_kw,
@@ -233,17 +226,17 @@ mod tests {
     }
 
     #[test]
-    fn weaker_stream_limits_the_transfer() {
+    fn efficiency_does_not_depend_on_the_flows() {
         let (supply, mut extract) = winter();
         extract.flow_m3h = 1000.0;
         let plate = HeatRecovery::PlateExchanger {
             arrangement: PlateArrangement::Counterflow,
-            temp_efficiency: 0.95,
+            temp_efficiency: 0.8,
         };
         let out = plate.exchange(supply, extract);
         assert!(
-            out.extract_out.temp_c >= supply.temp_c - 1e-9,
-            "extract cooled below the supply inlet"
+            (out.supply_out.temp_c - (-5.0 + 0.8 * 27.0)).abs() < 1e-6,
+            "supply temperature changed with the flow ratio"
         );
     }
 

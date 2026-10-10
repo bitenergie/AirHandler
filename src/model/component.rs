@@ -133,8 +133,8 @@ impl Component {
             }
             Self::PressureDrop { pressure_pa } => out.pressure_pa -= pressure_pa,
         }
-        // Mass flow is conserved; the volume flow follows the new density.
-        (out.with_mass_flow(mass), duty)
+        // The volume flow is the same at the inlet and the outlet of every component.
+        (out, duty)
     }
 
     /// One-line summary of `duty` for display on the component.
@@ -217,10 +217,7 @@ mod tests {
         assert_eq!(out.temp_c, air.temp_c);
         assert_eq!(out.humidity_ratio, air.humidity_ratio);
         assert_eq!(duty, Duty::default());
-        assert!(
-            (out.mass_flow() - air.mass_flow()).abs() < 1e-9,
-            "mass drifted"
-        );
+        assert_eq!(out.flow_m3h, air.flow_m3h, "volume flow changed");
     }
 
     #[test]
