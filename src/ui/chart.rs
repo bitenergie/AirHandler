@@ -1,7 +1,9 @@
 use crate::model::chart::{self, CHART_TEMP_RANGE_C, LATENT_HEAT_KJ_KG};
 use crate::model::{AirHandlerUnit, AirState, DuctId, Simulation};
-use egui::{Align2, Color32, DragValue, RichText, Ui};
-use egui_plot::{HoverPosition, Line, LineStyle, Plot, PlotPoints, PlotUi, Points, Text};
+use egui::{Align, Align2, Color32, DragValue, Rect, RichText, Ui, vec2};
+use egui_plot::{
+    HoverPosition, Line, LineStyle, Plot, PlotPoint, PlotPoints, PlotUi, Points, Text,
+};
 
 /// Which diagram the chart widget draws.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
@@ -117,7 +119,16 @@ pub fn chart(ui: &mut Ui, unit: &mut AirHandlerUnit, settings: &mut ChartSetting
                 HoverPosition::Elsewhere { .. } => None,
             })
             .show(ui, |plot| {
-                background(plot, kind, pressure_pa);
+                let avoid: Vec<Vec<[f64; 2]>> = ducts
+                    .iter()
+                    .map(|(_, _, states)| {
+                        states
+                            .iter()
+                            .map(|s| kind.project((s.temp_c, s.humidity_ratio)))
+                            .collect()
+                    })
+                    .collect();
+                background(plot, kind, pressure_pa, &avoid);
                 for (duct, color, states) in &ducts {
                     let points: Vec<[f64; 2]> = states
                         .iter()
@@ -161,15 +172,24 @@ td = {:.1} °C",
     )
 }
 
+/// Draws the background lines and their labels for `kind`.
+fn background(plot: &mut PlotUi<'_>, kind: ChartKind, pressure_pa: f64, avoid: &[Vec<[f64; 2]>]) {
+    match kind {
+        ChartKind::Psychrometric => background_psychrometric(plot, pressure_pa),
+        ChartKind::Mollier => background_mollier(plot, pressure_pa, avoid),
+    }
+}
+
 /// Font size of the labels on the background lines.
 const LABEL_SIZE: f32 = 12.5;
 /// How far the density lines are extended past the humidity ratio 0 axis, so that their labels
 /// sit outside the grid.
 const DENSITY_EXTENSION: f64 = 6.0;
 
-/// Saturation and relative-humidity curves, isotherms, enthalpy and density lines, labelled
-/// like a printed h-x sheet.
-fn background(plot: &mut PlotUi<'_>, kind: ChartKind, pressure_pa: f64) {
+/// Background of the psychrometric chart: saturation and relative-humidity curves, isotherms,
+/// enthalpy and density lines, labelled at the line ends.
+fn background_psychrometric(plot: &mut PlotUi<'_>, pressure_pa: f64) {
+    let kind = ChartKind::Psychrometric;
     let faint = Color32::from_gray(128).gamma_multiply(0.45);
     let label_color = Color32::from_gray(128);
     let (t_min, t_max) = CHART_TEMP_RANGE_C;
@@ -224,6 +244,162 @@ fn label(plot: &mut PlotUi<'_>, at: [f64; 2], text: &str, color: Color32, anchor
             .color(color)
             .anchor(anchor),
     );
+}
+
+/// Humidity ratio (g/kg) the Mollier density lines are extended to, left of the axis, where
+/// their labels sit.
+const MOLLIER_DENSITY_LABEL_X: f64 = -3.0;
+/// Largest humidity ratio (g/kg) at which a density line counts as starting on the axis.
+const DENSITY_AXIS_TOLERANCE: f64 = 4.0;
+/// Distance in points between a Mollier relative humidity or enthalpy label and its line end.
+const LABEL_GAP: f32 = 5.0;
+/// Margin in points kept free around the duct paths by the Mollier labels.
+const PATH_MARGIN: f32 = 4.0;
+/// Rough glyph width of a label relative to its font size, used to estimate its extent.
+const LABEL_CHAR_WIDTH: f32 = 0.55;
+
+/// Places the labels of the background lines, dropping any that would overlap a label placed
+/// before it or leave the plot. Labels are placed in call order, so call it by priority.
+struct Labels {
+    placed: Vec<Rect>,
+    color: Color32,
+}
+
+impl Labels {
+    /// Keeps labels off the polyline through `path`, given in plot coordinates.
+    fn avoid_path(&mut self, plot: &PlotUi<'_>, path: &[[f64; 2]]) {
+        let transform = plot.transform();
+        let screen = |p: &[f64; 2]| transform.position_from_point(&PlotPoint::new(p[0], p[1]));
+        self.placed.extend(path.windows(2).map(|pair| {
+            Rect::from_two_pos(screen(&pair[0]), screen(&pair[1])).expand(PATH_MARGIN)
+        }));
+    }
+
+    /// Adds `text` at `at`, pushed `gap` points away from the point in the direction the
+    /// anchor points away from.
+    fn add(&mut self, plot: &mut PlotUi<'_>, at: [f64; 2], text: &str, anchor: Align2, gap: f32) {
+        let transform = plot.transform();
+        let away = |align: Align| match align {
+            Align::Min => gap,
+            Align::Center => 0.0,
+            Align::Max => -gap,
+        };
+        let pos = transform.position_from_point(&PlotPoint::new(at[0], at[1]))
+            + vec2(away(anchor.x()), away(anchor.y()));
+        let at = transform.value_from_position(pos);
+        let size = vec2(
+            text.chars().count() as f32 * LABEL_SIZE * LABEL_CHAR_WIDTH,
+            LABEL_SIZE * 1.2,
+        );
+        let rect = anchor.anchor_size(pos, size).expand(2.0);
+        if !transform.frame().contains_rect(rect) || self.placed.iter().any(|r| r.intersects(rect))
+        {
+            return;
+        }
+        self.placed.push(rect);
+        plot.text(
+            Text::new("", at, RichText::new(text).size(LABEL_SIZE))
+                .color(self.color)
+                .anchor(anchor),
+        );
+    }
+}
+
+/// Background of the Mollier h-x diagram. Its lines run diagonally and crowd together, so the
+/// labels are placed with collision avoidance instead of at fixed line ends.
+fn background_mollier(plot: &mut PlotUi<'_>, pressure_pa: f64, avoid: &[Vec<[f64; 2]>]) {
+    let kind = ChartKind::Mollier;
+    let faint = Color32::from_gray(128).gamma_multiply(0.45);
+    let label_color = Color32::from_gray(128);
+    let (t_min, t_max) = CHART_TEMP_RANGE_C;
+    let mut labels = Labels {
+        placed: Vec::new(),
+        color: label_color,
+    };
+    for path in avoid {
+        labels.avoid_path(plot, path);
+    }
+
+    for t in (t_min.div_euclid(5) * 5..=t_max).step_by(5) {
+        if t >= t_min {
+            let line = chart::isotherm(f64::from(t), pressure_pa);
+            let points = project_all(&line, kind);
+            plot.line(plain_line(points, faint, 1.0));
+        }
+    }
+    // Enthalpy lines start on the saturation curve; their labels sit just outside it, in the
+    // otherwise empty fog region.
+    let mut enthalpy_labels = Vec::new();
+    for h in (-20..=130).step_by(5) {
+        let line = chart::enthalpy_line(f64::from(h), pressure_pa);
+        let points = project_all(&line, kind);
+        if let Some(&start) = points.first()
+            && h % 10 == 0
+        {
+            enthalpy_labels.push((start, format!("{h} kJ/kg")));
+        }
+        plot.line(plain_line(points, faint, 1.0));
+    }
+    let mut density_labels = Vec::new();
+    for density in [1.05, 1.10, 1.15, 1.20, 1.25, 1.30] {
+        let line = chart::density_line(density, pressure_pa);
+        let mut points = project_all(&line, kind);
+        // Start at the left end. Lines that reach the humidity ratio 0 axis there are extended
+        // past it and labelled outside the grid; the others are labelled above their top end.
+        if points
+            .first()
+            .zip(points.last())
+            .is_some_and(|(a, b)| b[0] < a[0])
+        {
+            points.reverse();
+        }
+        let text = format!("{density:.2} kg/m³");
+        if points
+            .first()
+            .is_some_and(|start| start[0] < DENSITY_AXIS_TOLERANCE)
+        {
+            // Continue the line straight past the axis, up to the label position.
+            if let [first, second, ..] = points[..] {
+                let (dx, dy) = (first[0] - second[0], first[1] - second[1]);
+                if dx < 0.0 {
+                    let k = (MOLLIER_DENSITY_LABEL_X - first[0]) / dx;
+                    points.insert(0, [MOLLIER_DENSITY_LABEL_X, first[1] + k * dy]);
+                }
+            }
+            density_labels.push((points[0], text, Align2::RIGHT_CENTER));
+        } else if let Some(&top) = points.iter().max_by(|a, b| a[1].total_cmp(&b[1])) {
+            density_labels.push((top, text, Align2::CENTER_BOTTOM));
+        }
+        plot.line(plain_line(points, faint, 1.0).style(LineStyle::dashed_dense()));
+    }
+    // Relative humidity labels have the highest priority: above the top edge when the curve
+    // leaves through it, otherwise to the right of the humidity ratio limit.
+    for rh in (10..=90).step_by(10) {
+        let line = chart::rel_humidity_curve(f64::from(rh), pressure_pa);
+        let points = project_all(&line, kind);
+        let leaves_at_top = line
+            .last()
+            .is_some_and(|&(t, _)| t >= f64::from(t_max) - 1e-9);
+        if let Some(&end) = points.last() {
+            let anchor = if leaves_at_top {
+                Align2::CENTER_BOTTOM
+            } else {
+                Align2::LEFT_CENTER
+            };
+            labels.add(plot, end, &format!("{rh} %"), anchor, LABEL_GAP);
+        }
+        plot.line(plain_line(points, label_color.gamma_multiply(0.7), 1.0));
+    }
+    for (at, text) in enthalpy_labels {
+        labels.add(plot, at, &text, Align2::LEFT_TOP, LABEL_GAP);
+    }
+    for (at, text, anchor) in density_labels {
+        labels.add(plot, at, &text, anchor, 0.0);
+    }
+    let saturation = chart::rel_humidity_curve(100.0, pressure_pa);
+    let color = Color32::from_gray(160);
+    let points = project_all(&saturation, kind);
+    plot.line(plain_line(points, color, 2.5).name("φ = 100 %"));
 }
 
 fn project_all(points: &[(f64, f64)], kind: ChartKind) -> Vec<[f64; 2]> {
