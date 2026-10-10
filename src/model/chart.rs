@@ -80,6 +80,7 @@ pub fn enthalpy_at(temp_c: f64, hum_ratio: f64) -> f64 {
         humidity_ratio: hum_ratio,
         flow_m3h: 0.0,
         pressure_pa: 0.0,
+        atm_pressure_pa: ATM_PRESSURE_PA,
     }
     .enthalpy()
 }

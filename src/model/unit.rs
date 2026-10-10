@@ -1,7 +1,7 @@
 //! The air handler unit: two ducts, each an ordered chain of components, optionally coupled
 //! by one heat recovery.
 
-use super::air::AirState;
+use super::air::{ATM_PRESSURE_PA, AirState};
 use super::component::{Component, ComponentKind, Duty};
 use super::recovery::{Exchange, HeatRecovery, HeatRecoveryKind};
 
@@ -69,8 +69,14 @@ impl Duct {
         }
     }
 
-    pub fn inlet(&self) -> AirState {
-        AirState::from_rel_humidity(self.inlet_temp_c, self.inlet_rel_humidity, self.flow_m3h)
+    /// The air entering the duct at barometric pressure `atm_pressure_pa`.
+    pub fn inlet(&self, atm_pressure_pa: f64) -> AirState {
+        AirState::from_rel_humidity_at(
+            self.inlet_temp_c,
+            self.inlet_rel_humidity,
+            self.flow_m3h,
+            atm_pressure_pa,
+        )
     }
 }
 
@@ -98,6 +104,13 @@ pub struct AirHandlerUnit {
     extract: Duct,
     recovery: Option<PlacedRecovery>,
     next_id: u64,
+    /// Barometric pressure of the site in mbar, used by the calculation and the chart.
+    #[serde(default = "default_pressure_mbar")]
+    pub pressure_mbar: f64,
+}
+
+fn default_pressure_mbar() -> f64 {
+    ATM_PRESSURE_PA / 100.0
 }
 
 impl AirHandlerUnit {
@@ -108,6 +121,7 @@ impl AirHandlerUnit {
             extract: Duct::new(22.0, 40.0, 3000.0),
             recovery: None,
             next_id: 0,
+            pressure_mbar: default_pressure_mbar(),
         }
     }
 }
@@ -181,6 +195,16 @@ impl AirHandlerUnit {
             DuctId::Supply => &self.supply,
             DuctId::Extract => &self.extract,
         }
+    }
+
+    /// Barometric pressure in Pa.
+    pub fn pressure_pa(&self) -> f64 {
+        self.pressure_mbar * 100.0
+    }
+
+    /// The air entering `duct`.
+    pub fn inlet(&self, duct: DuctId) -> AirState {
+        self.duct(duct).inlet(self.pressure_pa())
     }
 
     pub fn duct_mut(&mut self, id: DuctId) -> &mut Duct {
@@ -295,12 +319,12 @@ impl AirHandlerUnit {
         let mut extract_stages = Vec::new();
         let supply_mid = run(
             &self.supply.components[..supply_split],
-            self.supply.inlet(),
+            self.inlet(DuctId::Supply),
             &mut supply_stages,
         );
         let extract_mid = run(
             &self.extract.components[..extract_split],
-            self.extract.inlet(),
+            self.inlet(DuctId::Extract),
             &mut extract_stages,
         );
 

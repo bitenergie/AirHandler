@@ -87,7 +87,7 @@ impl eframe::App for AirHandlerApp {
             .default_size(380.0)
             .size_range(160.0..=900.0)
             .show(ui, |ui| {
-                ui::chart(ui, &self.unit, &mut self.chart);
+                ui::chart(ui, &mut self.unit, &mut self.chart);
             });
 
         egui::CentralPanel::default().show(ui, |ui| {

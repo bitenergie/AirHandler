@@ -28,15 +28,34 @@ pub struct AirState {
     /// Static pressure relative to the atmosphere, in Pa. Fans raise it, pressure drops lower it.
     #[serde(default)]
     pub pressure_pa: f64,
+    /// Barometric pressure of the site in Pa, the reference for `pressure_pa`.
+    #[serde(default = "default_atm_pressure_pa")]
+    pub atm_pressure_pa: f64,
+}
+
+fn default_atm_pressure_pa() -> f64 {
+    ATM_PRESSURE_PA
 }
 
 impl AirState {
+    /// Air at standard atmospheric pressure.
     pub fn from_rel_humidity(temp_c: f64, rel_humidity: f64, flow_m3h: f64) -> Self {
+        Self::from_rel_humidity_at(temp_c, rel_humidity, flow_m3h, ATM_PRESSURE_PA)
+    }
+
+    /// Air at barometric pressure `atm_pressure_pa`.
+    pub fn from_rel_humidity_at(
+        temp_c: f64,
+        rel_humidity: f64,
+        flow_m3h: f64,
+        atm_pressure_pa: f64,
+    ) -> Self {
         Self {
             temp_c,
-            humidity_ratio: Self::humidity_ratio_at(temp_c, rel_humidity, ATM_PRESSURE_PA),
+            humidity_ratio: Self::humidity_ratio_at(temp_c, rel_humidity, atm_pressure_pa),
             flow_m3h,
             pressure_pa: 0.0,
+            atm_pressure_pa,
         }
     }
 
@@ -54,7 +73,7 @@ impl AirState {
 
     /// Absolute pressure in Pa.
     pub fn abs_pressure_pa(&self) -> f64 {
-        ATM_PRESSURE_PA + self.pressure_pa
+        self.atm_pressure_pa + self.pressure_pa
     }
 
     /// Humidity ratio of saturated air at this state's temperature and pressure.

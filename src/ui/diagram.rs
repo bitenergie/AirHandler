@@ -97,6 +97,7 @@ pub fn diagram(ui: &mut Ui, unit: &mut AirHandlerUnit, selection: &mut Option<Se
             let view = DuctView {
                 id,
                 duct: unit.duct(id),
+                inlet: unit.inlet(id),
                 result: sim.duct(id),
                 layout,
             };
@@ -140,6 +141,7 @@ pub fn diagram(ui: &mut Ui, unit: &mut AirHandlerUnit, selection: &mut Option<Se
 struct DuctView<'a> {
     id: DuctId,
     duct: &'a Duct,
+    inlet: AirState,
     result: &'a DuctResult,
     layout: Layout,
 }
@@ -167,6 +169,7 @@ fn duct_row(
         duct,
         result,
         layout,
+        ..
     } = *view;
     let count = duct.components.len();
     let (rect, row) = ui.allocate_exact_size(vec2(width, ROW_HEIGHT), Sense::hover());
@@ -255,9 +258,10 @@ fn row_labels(
 ) {
     let DuctView {
         id,
-        duct,
+        inlet,
         result,
         layout,
+        ..
     } = *view;
     let painter = ui.painter_at(rect);
     let visuals = ui.visuals();
@@ -283,7 +287,7 @@ fn row_labels(
     painter.text(
         rect.min + vec2(12.0, 36.0),
         Align2::LEFT_TOP,
-        state_text(&duct.inlet()),
+        state_text(&inlet),
         FontId::proportional(12.0),
         visuals.weak_text_color(),
     );

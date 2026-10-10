@@ -1,4 +1,4 @@
-use crate::model::chart::{self, CHART_PRESSURE_PA, CHART_TEMP_RANGE_C, LATENT_HEAT_KJ_KG};
+use crate::model::chart::{self, CHART_TEMP_RANGE_C, LATENT_HEAT_KJ_KG};
 use crate::model::{AirHandlerUnit, AirState, DuctId, Simulation};
 use egui::{Align2, Color32, DragValue, RichText, Ui};
 use egui_plot::{HoverPosition, Line, LineStyle, Plot, PlotPoints, PlotUi, Points, Text};
@@ -15,21 +15,10 @@ pub enum ChartKind {
 }
 
 /// User settings of the chart widget.
-#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct ChartSettings {
     pub kind: ChartKind,
-    /// Barometric pressure the chart is drawn for, in mbar.
-    pub pressure_mbar: f64,
-}
-
-impl Default for ChartSettings {
-    fn default() -> Self {
-        Self {
-            kind: ChartKind::default(),
-            pressure_mbar: CHART_PRESSURE_PA / 100.0,
-        }
-    }
 }
 
 impl ChartKind {
@@ -71,7 +60,7 @@ const EXTRACT_COLOR: Color32 = Color32::from_rgb(0xd9, 0x8a, 0x3c);
 /// Psychrometric chart or Mollier h-x diagram with the state points of both airstreams.
 ///
 /// Drag pans, Ctrl + scroll zooms, right-drag draws a zoom box, double-click resets the view.
-pub fn chart(ui: &mut Ui, unit: &AirHandlerUnit, settings: &mut ChartSettings) {
+pub fn chart(ui: &mut Ui, unit: &mut AirHandlerUnit, settings: &mut ChartSettings) {
     ui.horizontal(|ui| {
         for option in ChartKind::ALL {
             ui.selectable_value(&mut settings.kind, option, option.label());
@@ -79,7 +68,7 @@ pub fn chart(ui: &mut Ui, unit: &AirHandlerUnit, settings: &mut ChartSettings) {
         ui.separator();
         ui.label("p");
         ui.add(
-            DragValue::new(&mut settings.pressure_mbar)
+            DragValue::new(&mut unit.pressure_mbar)
                 .range(300.0..=1100.0)
                 .speed(1.0)
                 .suffix(" mbar"),
@@ -87,7 +76,7 @@ pub fn chart(ui: &mut Ui, unit: &AirHandlerUnit, settings: &mut ChartSettings) {
         ui.weak("drag: pan · Ctrl+scroll: zoom · right-drag: box zoom · double-click: reset");
     });
     let kind = settings.kind;
-    let pressure_pa = settings.pressure_mbar * 100.0;
+    let pressure_pa = unit.pressure_pa();
     let simulation = unit.simulate();
     let (x_label, y_label) = kind.axis_labels();
 
@@ -271,7 +260,7 @@ fn plain_line(points: Vec<[f64; 2]>, color: Color32, width: f32) -> Line<'static
 /// outlet inserted where the recovery sits.
 fn path(unit: &AirHandlerUnit, simulation: &Simulation, duct: DuctId) -> Vec<AirState> {
     let result = simulation.duct(duct);
-    let mut states = vec![unit.duct(duct).inlet()];
+    let mut states = vec![unit.inlet(duct)];
     let recovery_state = simulation.recovery.map(|stage| match duct {
         DuctId::Supply => stage.exchange.supply_out,
         DuctId::Extract => stage.exchange.extract_out,
